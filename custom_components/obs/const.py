@@ -20,6 +20,8 @@ CONF_SSH_HOST = "ssh_host"
 CONF_SSH_PORT = "ssh_port"
 CONF_SSH_USERNAME = "ssh_username"
 CONF_SSH_KEY_PATH = "ssh_key_path"
+CONF_SSH_KEY_CONTENT = "ssh_key_content"   # inline private key (alternative to path)
+CONF_SSH_KNOWN_HOSTS = "ssh_known_hosts"   # known_hosts entry; blank = skip host key check
 CONF_OBS_REMOTE_HOST = "obs_remote_host"
 
 # Defaults

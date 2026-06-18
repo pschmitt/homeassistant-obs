@@ -1,6 +1,6 @@
-# homeassistant-obs
+# homeassistant-obs-studio
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 A Home Assistant custom integration for **OBS Studio** via the OBS WebSocket v5 protocol.
@@ -74,12 +74,18 @@ The SSH key must be pre-authorised on the remote host (`~/.ssh/authorized_keys`)
 
 ### HACS (custom repo)
 
-Add `https://github.com/pschmitt/homeassistant-obs` as a custom HACS repository,
+Add `https://github.com/pschmitt/homeassistant-obs-studio` as a custom HACS repository,
 install, and restart Home Assistant.
 
 ## Configuration
 
 All settings are managed through the UI config flow.  No YAML required.
+
+## Logo
+
+The OBS Studio logo used in this integration is © OBS Project contributors and is licensed
+under the [GNU General Public License v2.0](https://github.com/obsproject/obs-studio/blob/master/COPYING).
+It is included here solely to identify the integrated software.
 
 ## License
 

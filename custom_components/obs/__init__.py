@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 
 from .api import OBSClient
@@ -13,7 +13,9 @@ from .const import (
     CONF_OBS_REMOTE_HOST,
     CONF_SSH_ENABLED,
     CONF_SSH_HOST,
+    CONF_SSH_KEY_CONTENT,
     CONF_SSH_KEY_PATH,
+    CONF_SSH_KNOWN_HOSTS,
     CONF_SSH_PORT,
     CONF_SSH_USERNAME,
     CONF_WS_PASSWORD,
@@ -29,6 +31,7 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import OBSCoordinator
+from .events import OBSEventListener
 from .services import async_setup_services
 from .ssh_tunnel import OBSSSHTunnel
 
@@ -40,6 +43,7 @@ class OBSRuntimeData:
     client: OBSClient
     coordinator: OBSCoordinator
     ssh_tunnel: OBSSSHTunnel | None
+    event_listener: OBSEventListener | None
 
 
 type OBSConfigEntry = ConfigEntry[OBSRuntimeData]
@@ -62,7 +66,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
             ssh_host=ssh_host,
             ssh_port=config_entry.data.get(CONF_SSH_PORT, DEFAULT_SSH_PORT),
             ssh_username=config_entry.data.get(CONF_SSH_USERNAME, DEFAULT_SSH_USERNAME),
-            ssh_key_path=config_entry.data.get(CONF_SSH_KEY_PATH, DEFAULT_SSH_KEY_PATH),
+            ssh_key_path=config_entry.data.get(CONF_SSH_KEY_PATH) or DEFAULT_SSH_KEY_PATH,
+            ssh_key_content=config_entry.data.get(CONF_SSH_KEY_CONTENT) or None,
+            ssh_known_hosts=config_entry.data.get(CONF_SSH_KNOWN_HOSTS) or None,
             obs_remote_host=config_entry.data.get(CONF_OBS_REMOTE_HOST, DEFAULT_OBS_REMOTE_HOST),
             obs_remote_port=ws_port,
         )
@@ -70,10 +76,12 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
         ws_host = "127.0.0.1"
         ws_port = local_port
 
+    password = config_entry.data.get(CONF_WS_PASSWORD, "")
+
     client = OBSClient(
         host=ws_host,
         port=ws_port,
-        password=config_entry.data.get(CONF_WS_PASSWORD, ""),
+        password=password,
         timeout=DEFAULT_REQUEST_TIMEOUT,
     )
 
@@ -85,10 +93,21 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
     )
     await coordinator.async_config_entry_first_refresh()
 
+    # Start real-time event listener (best-effort; polling still works without it).
+    event_listener = OBSEventListener(
+        host=ws_host,
+        port=ws_port,
+        password=password,
+        loop=hass.loop,
+        refresh_callback=coordinator.async_request_refresh,
+    )
+    await hass.async_add_executor_job(event_listener.start)
+
     config_entry.runtime_data = OBSRuntimeData(
         client=client,
         coordinator=coordinator,
         ssh_tunnel=ssh_tunnel,
+        event_listener=event_listener,
     )
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
@@ -101,6 +120,8 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) 
     runtime: OBSRuntimeData = config_entry.runtime_data
     ok = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
     if ok:
+        if runtime.event_listener is not None:
+            await hass.async_add_executor_job(runtime.event_listener.stop)
         await hass.async_add_executor_job(runtime.client.disconnect)
         if runtime.ssh_tunnel is not None:
             await runtime.ssh_tunnel.async_stop()

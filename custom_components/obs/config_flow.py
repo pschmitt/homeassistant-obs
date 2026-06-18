@@ -25,7 +25,9 @@ from .const import (
     CONF_OBS_REMOTE_HOST,
     CONF_SSH_ENABLED,
     CONF_SSH_HOST,
+    CONF_SSH_KEY_CONTENT,
     CONF_SSH_KEY_PATH,
+    CONF_SSH_KNOWN_HOSTS,
     CONF_SSH_PORT,
     CONF_SSH_USERNAME,
     CONF_WS_PASSWORD,
@@ -60,7 +62,9 @@ async def _async_validate(hass: HomeAssistant, data: dict[str, Any]) -> None:
                 ssh_host=ssh_host,
                 ssh_port=int(data.get(CONF_SSH_PORT, DEFAULT_SSH_PORT)),
                 ssh_username=data.get(CONF_SSH_USERNAME, DEFAULT_SSH_USERNAME),
-                ssh_key_path=data.get(CONF_SSH_KEY_PATH, DEFAULT_SSH_KEY_PATH),
+                ssh_key_path=data.get(CONF_SSH_KEY_PATH) or DEFAULT_SSH_KEY_PATH,
+                ssh_key_content=data.get(CONF_SSH_KEY_CONTENT) or None,
+                ssh_known_hosts=data.get(CONF_SSH_KNOWN_HOSTS) or None,
                 obs_remote_host=data.get(CONF_OBS_REMOTE_HOST, DEFAULT_OBS_REMOTE_HOST),
                 obs_remote_port=ws_port,
             )
@@ -101,10 +105,18 @@ def _connection_schema(defaults: dict[str, Any], *, password_optional: bool = Fa
             CONF_SSH_USERNAME,
             default=defaults.get(CONF_SSH_USERNAME, DEFAULT_SSH_USERNAME),
         ): TextSelector(),
-        vol.Required(
+        vol.Optional(
             CONF_SSH_KEY_PATH,
             default=defaults.get(CONF_SSH_KEY_PATH, DEFAULT_SSH_KEY_PATH),
         ): TextSelector(),
+        vol.Optional(
+            CONF_SSH_KEY_CONTENT,
+            default=defaults.get(CONF_SSH_KEY_CONTENT, ""),
+        ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD, multiline=True)),
+        vol.Optional(
+            CONF_SSH_KNOWN_HOSTS,
+            default=defaults.get(CONF_SSH_KNOWN_HOSTS, ""),
+        ): TextSelector(TextSelectorConfig(multiline=True)),
         vol.Required(
             CONF_OBS_REMOTE_HOST,
             default=defaults.get(CONF_OBS_REMOTE_HOST, DEFAULT_OBS_REMOTE_HOST),

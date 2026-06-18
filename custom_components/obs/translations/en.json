@@ -14,6 +14,8 @@
           "ssh_port": "SSH port",
           "ssh_username": "SSH username",
           "ssh_key_path": "SSH private key path",
+          "ssh_key_content": "SSH private key (paste content)",
+          "ssh_known_hosts": "SSH server public keys (known_hosts)",
           "obs_remote_host": "OBS host as seen from SSH server"
         },
         "data_description": {
@@ -22,7 +24,9 @@
           "ws_password": "Password set in OBS → Tools → WebSocket Server Settings.",
           "ssh_enabled": "Forward the OBS WebSocket port over an SSH tunnel. Useful when OBS only listens on localhost.",
           "ssh_host": "SSH server hostname. Defaults to the OBS host when left blank.",
-          "ssh_key_path": "Absolute path to the SSH private key file on this Home Assistant instance.",
+          "ssh_key_path": "Absolute path to the SSH private key file on this Home Assistant instance. Used when key content is not provided.",
+          "ssh_key_content": "Paste the PEM-encoded private key directly. Takes precedence over the key path when provided.",
+          "ssh_known_hosts": "Paste the known_hosts entry for the SSH server (e.g. from `ssh-keyscan`). Leave blank to skip host key verification.",
           "obs_remote_host": "Hostname/IP of OBS as seen from the SSH server. Usually `localhost`."
         }
       },
@@ -38,6 +42,8 @@
           "ssh_port": "SSH port",
           "ssh_username": "SSH username",
           "ssh_key_path": "SSH private key path",
+          "ssh_key_content": "SSH private key (paste content)",
+          "ssh_known_hosts": "SSH server public keys (known_hosts)",
           "obs_remote_host": "OBS host as seen from SSH server"
         }
       },

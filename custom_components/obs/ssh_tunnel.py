@@ -12,6 +12,31 @@ from .exceptions import OBSSSHError
 _LOGGER = logging.getLogger(__name__)
 
 
+def _build_known_hosts(known_hosts_content: str | None):
+    """Return an asyncssh known_hosts value from user-supplied content.
+
+    Returns None when the content is empty (skip host-key verification).
+    """
+    if not known_hosts_content or not known_hosts_content.strip():
+        return None
+    try:
+        return asyncssh.import_known_hosts(known_hosts_content.strip())
+    except Exception as err:
+        raise OBSSSHError(f"Invalid known_hosts content: {err}") from err
+
+
+def _build_client_keys(key_path: str | None, key_content: str | None) -> list:
+    """Return client keys for asyncssh from either a path or inline content."""
+    if key_content and key_content.strip():
+        try:
+            return [asyncssh.import_private_key(key_content.strip())]
+        except Exception as err:
+            raise OBSSSHError(f"Invalid SSH private key: {err}") from err
+    if key_path and key_path.strip():
+        return [key_path.strip()]
+    return []
+
+
 class OBSSSHTunnel:
     """Persistent SSH tunnel that forwards a remote OBS WebSocket port locally.
 
@@ -32,11 +57,15 @@ class OBSSSHTunnel:
         ssh_key_path: str | None,
         obs_remote_host: str,
         obs_remote_port: int,
+        ssh_key_content: str | None = None,
+        ssh_known_hosts: str | None = None,
     ) -> None:
         self._ssh_host = ssh_host
         self._ssh_port = ssh_port
         self._ssh_username = ssh_username
         self._ssh_key_path = ssh_key_path
+        self._ssh_key_content = ssh_key_content
+        self._ssh_known_hosts = ssh_known_hosts
         self._obs_remote_host = obs_remote_host
         self._obs_remote_port = obs_remote_port
 
@@ -70,13 +99,14 @@ class OBSSSHTunnel:
         """Establish the SSH tunnel and return the assigned local port."""
         await self.async_stop()
         try:
-            client_keys = [self._ssh_key_path] if self._ssh_key_path else []
+            client_keys = _build_client_keys(self._ssh_key_path, self._ssh_key_content)
+            known_hosts = _build_known_hosts(self._ssh_known_hosts)
             self._conn = await asyncssh.connect(
                 self._ssh_host,
                 port=self._ssh_port,
                 username=self._ssh_username,
-                client_keys=client_keys,
-                known_hosts=None,
+                client_keys=client_keys if client_keys else None,
+                known_hosts=known_hosts,
             )
             self._listener = await self._conn.forward_local_port(
                 "127.0.0.1",
@@ -93,6 +123,9 @@ class OBSSSHTunnel:
                 self._ssh_host,
             )
             return port
+        except OBSSSHError:
+            await self.async_stop()
+            raise
         except (asyncssh.Error, OSError, ValueError) as err:
             await self.async_stop()
             raise OBSSSHError(
