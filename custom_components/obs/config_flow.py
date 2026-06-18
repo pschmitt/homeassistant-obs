@@ -127,7 +127,7 @@ def _connection_schema(defaults: dict[str, Any], *, password_optional: bool = Fa
 class OBSConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OBS Studio."""
 
-    VERSION = 1
+    VERSION = 2
 
     @staticmethod
     @callback
@@ -167,7 +167,7 @@ class OBSConfigFlow(ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Optional(CONF_NAME, default=""): TextSelector(),
+                vol.Optional(CONF_NAME, default="OBS Studio"): TextSelector(),
                 **_connection_schema(user_input or {}),
             }
         )

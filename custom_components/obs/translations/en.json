@@ -19,6 +19,7 @@
           "obs_remote_host": "OBS host as seen from SSH server"
         },
         "data_description": {
+          "name": "Friendly name for this OBS instance. Determines entity ID prefix — use 'OBS Studio {hostname}' for consistent naming (e.g. 'OBS Studio ge2').",
           "host": "Hostname or IP of the machine running OBS Studio.",
           "ws_port": "OBS WebSocket port (default: 4455).",
           "ws_password": "Password set in OBS → Tools → WebSocket Server Settings.",

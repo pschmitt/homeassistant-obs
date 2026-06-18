@@ -251,6 +251,7 @@ class OBSClient:
 
     def set_current_scene(self, scene_name: str) -> None:
         """Switch to a named scene."""
+        _LOGGER.debug("OBS set_current_scene → %r", scene_name)
         self._call("set_current_program_scene", scene_name)
 
     # ------------------------------------------------------------------
@@ -258,12 +259,15 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def start_stream(self) -> None:
+        _LOGGER.debug("OBS start_stream")
         self._call("start_stream")
 
     def stop_stream(self) -> None:
+        _LOGGER.debug("OBS stop_stream")
         self._call("stop_stream")
 
     def toggle_stream(self) -> None:
+        _LOGGER.debug("OBS toggle_stream")
         self._call("toggle_stream")
 
     # ------------------------------------------------------------------
@@ -271,18 +275,23 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def start_record(self) -> None:
+        _LOGGER.debug("OBS start_record")
         self._call("start_record")
 
     def stop_record(self) -> None:
+        _LOGGER.debug("OBS stop_record")
         self._call("stop_record")
 
     def toggle_record(self) -> None:
+        _LOGGER.debug("OBS toggle_record")
         self._call("toggle_record")
 
     def pause_record(self) -> None:
+        _LOGGER.debug("OBS pause_record")
         self._call("pause_record")
 
     def resume_record(self) -> None:
+        _LOGGER.debug("OBS resume_record")
         self._call("resume_record")
 
     # ------------------------------------------------------------------
@@ -290,12 +299,15 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def start_virtual_cam(self) -> None:
+        _LOGGER.debug("OBS start_virtual_cam")
         self._call("start_virtual_cam")
 
     def stop_virtual_cam(self) -> None:
+        _LOGGER.debug("OBS stop_virtual_cam")
         self._call("stop_virtual_cam")
 
     def toggle_virtual_cam(self) -> None:
+        _LOGGER.debug("OBS toggle_virtual_cam")
         self._call("toggle_virtual_cam")
 
     # ------------------------------------------------------------------
@@ -303,6 +315,7 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def set_studio_mode_enabled(self, enabled: bool) -> None:
+        _LOGGER.debug("OBS set_studio_mode_enabled → %s", enabled)
         self._call("set_studio_mode_enabled", enabled)
 
     # ------------------------------------------------------------------
@@ -310,12 +323,15 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def start_replay_buffer(self) -> None:
+        _LOGGER.debug("OBS start_replay_buffer")
         self._call("start_replay_buffer")
 
     def stop_replay_buffer(self) -> None:
+        _LOGGER.debug("OBS stop_replay_buffer")
         self._call("stop_replay_buffer")
 
     def save_replay_buffer(self) -> None:
+        _LOGGER.debug("OBS save_replay_buffer")
         self._call("save_replay_buffer")
 
     # ------------------------------------------------------------------
@@ -323,6 +339,7 @@ class OBSClient:
     # ------------------------------------------------------------------
 
     def trigger_hotkey(self, hotkey_name: str) -> None:
+        _LOGGER.debug("OBS trigger_hotkey %r", hotkey_name)
         self._call("trigger_hot_key_by_name", hotkey_name)
 
     # ------------------------------------------------------------------

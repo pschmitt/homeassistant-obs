@@ -205,11 +205,23 @@ class OBSEventListener:
                 return
             except Exception as err:
                 delay = _BACKOFF[min(attempt, len(_BACKOFF) - 1)]
-                _LOGGER.warning(
-                    "OBS event listener disconnected (%s) – reconnecting in %ss",
-                    err,
-                    delay,
-                )
+                if attempt == 0:
+                    # First failure — log at ERROR so it's visible without debug mode.
+                    _LOGGER.error(
+                        "OBS event listener failed to connect to %s:%s (%s) – retrying in %ss",
+                        self._host,
+                        self._port,
+                        err,
+                        delay,
+                    )
+                else:
+                    _LOGGER.warning(
+                        "OBS event listener disconnected from %s:%s (%s) – reconnecting in %ss",
+                        self._host,
+                        self._port,
+                        err,
+                        delay,
+                    )
                 attempt += 1
                 await asyncio.sleep(delay)
 
@@ -218,6 +230,7 @@ class OBSEventListener:
         import aiohttp
 
         url = f"ws://{self._host}:{self._port}"
+        _LOGGER.debug("OBS event listener connecting to %s", url)
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(
                 url,
@@ -226,9 +239,12 @@ class OBSEventListener:
             ) as ws:
                 await self._handshake(ws)
                 _LOGGER.debug(
-                    "OBS event listener connected to %s:%s", self._host, self._port
+                    "OBS event listener connected and identified at %s:%s",
+                    self._host,
+                    self._port,
                 )
                 await self._event_loop(ws)
+        _LOGGER.debug("OBS event listener WebSocket closed cleanly")
 
     async def _handshake(self, ws) -> None:
         """Perform the OBS WebSocket v5 Hello/Identify exchange."""
@@ -295,11 +311,16 @@ class OBSEventListener:
             if data is not None:
                 updated = _patch_data(data, event_type, event_data)
                 if updated is not None:
-                    _LOGGER.debug("OBS fast-path: %s", event_type)
+                    _LOGGER.debug("OBS fast-path event: %s → state updated", event_type)
                     # Direct call — we ARE on the event loop
                     self._coordinator.async_set_updated_data(updated)
+                else:
+                    _LOGGER.debug("OBS fast-path event: %s → no-op (state unchanged)", event_type)
             return
 
         if event_type in _SLOW_EVENTS:
-            _LOGGER.debug("OBS slow-path: %s (full refresh)", event_type)
+            _LOGGER.debug("OBS slow-path event: %s → triggering full refresh", event_type)
             asyncio.ensure_future(self._coordinator.async_request_refresh())
+            return
+
+        _LOGGER.debug("OBS event ignored (not subscribed): %s", event_type)
