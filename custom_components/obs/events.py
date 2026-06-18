@@ -1,5 +1,10 @@
 """OBS Studio real-time event listener with fast-path state patching.
 
+obsws_python's Callback.trigger() dispatches only to functions whose __name__
+matches on_<snake_case_event>.  We bypass that by monkey-patching
+callback.trigger with a plain closure that feeds all events into our single
+_on_event handler.
+
 For known events (scene change, stream/record/vcam/studio/replay state) we
 patch the coordinator's OBSData in-place and call async_set_updated_data() —
 zero network I/O, entities update in milliseconds.
@@ -20,22 +25,21 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# These events carry enough payload to update state without a full re-fetch.
+# Events handled inline by patching coordinator data (fast path).
 _FAST_EVENTS: frozenset[str] = frozenset(
     {
         "CurrentProgramSceneChanged",
-        "CurrentPreviewSceneChanged",  # not exposed — no-op, but don't slow-path it
+        "CurrentPreviewSceneChanged",  # not tracked — no-op, but don't slow-path it
         "StreamStateChanged",
         "RecordStateChanged",
         "VirtualcamStateChanged",
         "StudioModeStateChanged",
         "ReplayBufferStateChanged",
-        "ReplayBufferSaved",  # informational only — no state change needed
+        "ReplayBufferSaved",  # informational — no state change needed
     }
 )
 
-# These events change the scene list; the payload doesn't include the full
-# list so a full re-fetch is the only option.
+# Events that require a full re-fetch (scene list isn't in the payload).
 _SLOW_EVENTS: frozenset[str] = frozenset(
     {
         "SceneCreated",
@@ -50,7 +54,7 @@ def _safe(event, attr, default=None):
 
 
 def _patch_data(data, event_type: str, event):
-    """Return an updated OBSData copy from event payload, or None if no-op."""
+    """Return an updated OBSData copy from the event payload, or None if no-op."""
     if event_type == "CurrentProgramSceneChanged":
         scene = _safe(event, "scene_name")
         if scene is None or scene == data.current_scene:
@@ -96,8 +100,8 @@ def _patch_data(data, event_type: str, event):
 class OBSEventListener:
     """Subscribes to OBS WebSocket events and updates coordinator state inline.
 
-    obsws_python.EventClient delivers callbacks from a background thread; we
-    bridge back to the HA event loop via asyncio.run_coroutine_threadsafe.
+    obsws_python.EventClient delivers events in a background thread; we bridge
+    back to the HA event loop via asyncio.run_coroutine_threadsafe.
     """
 
     def __init__(
@@ -120,7 +124,7 @@ class OBSEventListener:
     # ------------------------------------------------------------------
 
     def update_endpoint(self, host: str, port: int) -> None:
-        """Update host/port and restart if the endpoint actually changed."""
+        """Update host/port and restart the listener if the endpoint changed."""
         if host == self._host and port == self._port:
             return
         _LOGGER.debug(
@@ -137,13 +141,22 @@ class OBSEventListener:
             return
         try:
             import obsws_python as obsws
+            from obsws_python.util import as_dataclass
 
             cl = obsws.EventClient(
                 host=self._host,
                 port=self._port,
                 password=self._password,
             )
-            cl.callback.register(self._on_event)
+
+            # obsws_python's Callback.trigger() dispatches only to functions
+            # whose __name__ matches on_<snake_case_event>.  Monkey-patch it
+            # with a closure that forwards every event to our handler instead.
+            def _dispatch(event_type, data):
+                event_obj = as_dataclass(event_type, data) if data else None
+                self._on_event(event_type, event_obj)
+
+            cl.callback.trigger = _dispatch
             self._client = cl
             _LOGGER.debug(
                 "OBS event listener connected to %s:%s", self._host, self._port
@@ -174,10 +187,8 @@ class OBSEventListener:
     # Internal
     # ------------------------------------------------------------------
 
-    def _on_event(self, event) -> None:
-        """Called by obsws_python from its background thread."""
-        event_type = type(event).__name__
-
+    def _on_event(self, event_type: str, event) -> None:
+        """Called from the obsws_python background thread for every OBS event."""
         if event_type in _FAST_EVENTS:
             data = self._coordinator.data
             if data is not None:
