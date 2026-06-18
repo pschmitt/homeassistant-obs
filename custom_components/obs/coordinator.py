@@ -12,9 +12,14 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from typing import TYPE_CHECKING
+
 from .api import OBSClient, OBSData
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIR_AUTH_FAILED, REPAIR_CANNOT_CONNECT, REPAIR_SSH_FAILED
 from .exceptions import OBSAuthError, OBSConnectionError, OBSSSHError
+
+if TYPE_CHECKING:
+    from .events import OBSEventListener
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +49,7 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
         )
         self.client = client
         self._ssh_tunnel = ssh_tunnel
+        self.event_listener: OBSEventListener | None = None
 
     async def _async_update_data(self) -> OBSData:
         entry_id = self.config_entry.entry_id
@@ -53,7 +59,12 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
         if self._ssh_tunnel is not None:
             try:
                 local_port = await self._ssh_tunnel.async_ensure_alive()
+                prev_port = self.client._port
                 self.client.update_endpoint("127.0.0.1", local_port)
+                if local_port != prev_port and self.event_listener is not None:
+                    await self.hass.async_add_executor_job(
+                        self.event_listener.update_endpoint, "127.0.0.1", local_port
+                    )
                 ir.async_delete_issue(self.hass, DOMAIN, f"{REPAIR_SSH_FAILED}_{entry_id}")
             except OBSSSHError as err:
                 ir.async_create_issue(

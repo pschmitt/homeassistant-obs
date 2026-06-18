@@ -1,29 +1,43 @@
-"""OBS Studio real-time event listener.
+"""OBS Studio real-time event listener with fast-path state patching.
 
-Keeps a persistent WebSocket connection via obsws_python.EventClient and
-triggers coordinator refreshes when OBS state changes occur, giving
-near-real-time sensor updates alongside the regular polling cycle.
+For known events (scene change, stream/record/vcam/studio/replay state) we
+patch the coordinator's OBSData in-place and call async_set_updated_data() —
+zero network I/O, entities update in milliseconds.
+
+For events that change the scene list we fall back to a full coordinator
+refresh (async_request_refresh), which re-fetches everything over the wire.
 """
 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .coordinator import OBSCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Events that are meaningful to expose in HA.
-_INTERESTING_EVENTS = frozenset(
+# These events carry enough payload to update state without a full re-fetch.
+_FAST_EVENTS: frozenset[str] = frozenset(
     {
         "CurrentProgramSceneChanged",
-        "CurrentPreviewSceneChanged",
+        "CurrentPreviewSceneChanged",  # not exposed — no-op, but don't slow-path it
         "StreamStateChanged",
         "RecordStateChanged",
-        "RecordFileChanged",
         "VirtualcamStateChanged",
         "StudioModeStateChanged",
         "ReplayBufferStateChanged",
-        "ReplayBufferSaved",
+        "ReplayBufferSaved",  # informational only — no state change needed
+    }
+)
+
+# These events change the scene list; the payload doesn't include the full
+# list so a full re-fetch is the only option.
+_SLOW_EVENTS: frozenset[str] = frozenset(
+    {
         "SceneCreated",
         "SceneRemoved",
         "SceneNameChanged",
@@ -31,11 +45,59 @@ _INTERESTING_EVENTS = frozenset(
 )
 
 
-class OBSEventListener:
-    """Subscribes to OBS events and fires coordinator refreshes.
+def _safe(event, attr, default=None):
+    return getattr(event, attr, default)
 
-    obsws_python.EventClient delivers callbacks from a background thread;
-    we bridge them to the HA event loop via asyncio.run_coroutine_threadsafe.
+
+def _patch_data(data, event_type: str, event):
+    """Return an updated OBSData copy from event payload, or None if no-op."""
+    if event_type == "CurrentProgramSceneChanged":
+        scene = _safe(event, "scene_name")
+        if scene is None or scene == data.current_scene:
+            return None
+        return dataclasses.replace(data, current_scene=scene)
+
+    if event_type == "StreamStateChanged":
+        active = bool(_safe(event, "output_active", data.streaming))
+        if active == data.streaming:
+            return None
+        return dataclasses.replace(data, streaming=active)
+
+    if event_type == "RecordStateChanged":
+        active = bool(_safe(event, "output_active", data.recording))
+        # outputState is e.g. "OBS_WEBSOCKET_OUTPUT_PAUSED" when paused.
+        state_str = _safe(event, "output_state", "")
+        paused = state_str == "OBS_WEBSOCKET_OUTPUT_PAUSED"
+        if active == data.recording and paused == data.recording_paused:
+            return None
+        return dataclasses.replace(data, recording=active, recording_paused=paused)
+
+    if event_type == "VirtualcamStateChanged":
+        active = bool(_safe(event, "output_active", data.virtual_cam_active))
+        if active == data.virtual_cam_active:
+            return None
+        return dataclasses.replace(data, virtual_cam_active=active)
+
+    if event_type == "StudioModeStateChanged":
+        enabled = bool(_safe(event, "studio_mode_enabled", data.studio_mode_enabled))
+        if enabled == data.studio_mode_enabled:
+            return None
+        return dataclasses.replace(data, studio_mode_enabled=enabled)
+
+    if event_type == "ReplayBufferStateChanged":
+        active = bool(_safe(event, "output_active", data.replay_buffer_active))
+        if active == data.replay_buffer_active:
+            return None
+        return dataclasses.replace(data, replay_buffer_active=active)
+
+    return None  # no-op (ReplayBufferSaved, CurrentPreviewSceneChanged, etc.)
+
+
+class OBSEventListener:
+    """Subscribes to OBS WebSocket events and updates coordinator state inline.
+
+    obsws_python.EventClient delivers callbacks from a background thread; we
+    bridge back to the HA event loop via asyncio.run_coroutine_threadsafe.
     """
 
     def __init__(
@@ -44,13 +106,13 @@ class OBSEventListener:
         port: int,
         password: str,
         loop: asyncio.AbstractEventLoop,
-        refresh_callback,  # async callable (no args) that triggers a coordinator refresh
+        coordinator: "OBSCoordinator",
     ) -> None:
         self._host = host
         self._port = port
         self._password = password
         self._loop = loop
-        self._refresh_callback = refresh_callback
+        self._coordinator = coordinator
         self._client = None
 
     # ------------------------------------------------------------------
@@ -58,15 +120,19 @@ class OBSEventListener:
     # ------------------------------------------------------------------
 
     def update_endpoint(self, host: str, port: int) -> None:
-        """Update connection info and restart the listener if endpoint changed."""
-        if host != self._host or port != self._port:
-            self._host = host
-            self._port = port
-            self.stop()
-            self.start()
+        """Update host/port and restart if the endpoint actually changed."""
+        if host == self._host and port == self._port:
+            return
+        _LOGGER.debug(
+            "OBS event listener endpoint changed to %s:%s – reconnecting", host, port
+        )
+        self._host = host
+        self._port = port
+        self.stop()
+        self.start()
 
     def start(self) -> None:
-        """Connect the event client (synchronous; runs in executor)."""
+        """Connect the event client (synchronous; call via async_add_executor_job)."""
         if self._client is not None:
             return
         try:
@@ -77,7 +143,6 @@ class OBSEventListener:
                 port=self._port,
                 password=self._password,
             )
-            # Register a catch-all callback; filter by event type inside.
             cl.callback.register(self._on_event)
             self._client = cl
             _LOGGER.debug(
@@ -85,7 +150,7 @@ class OBSEventListener:
             )
         except Exception as err:
             _LOGGER.warning(
-                "OBS event listener failed to connect to %s:%s: %s",
+                "OBS event listener failed to connect to %s:%s – events disabled: %s",
                 self._host,
                 self._port,
                 err,
@@ -110,13 +175,25 @@ class OBSEventListener:
     # ------------------------------------------------------------------
 
     def _on_event(self, event) -> None:
-        """Called by obsws_python from its event thread."""
+        """Called by obsws_python from its background thread."""
         event_type = type(event).__name__
-        if event_type not in _INTERESTING_EVENTS:
+
+        if event_type in _FAST_EVENTS:
+            data = self._coordinator.data
+            if data is not None:
+                updated = _patch_data(data, event_type, event)
+                if updated is not None:
+                    _LOGGER.debug("OBS fast-path event: %s", event_type)
+                    asyncio.run_coroutine_threadsafe(
+                        self._async_set_data(updated), self._loop
+                    )
             return
-        _LOGGER.debug("OBS event received: %s", event_type)
-        # Bridge to the HA async event loop from the obsws_python thread.
-        try:
-            asyncio.run_coroutine_threadsafe(self._refresh_callback(), self._loop)
-        except Exception as err:
-            _LOGGER.debug("Failed to schedule coordinator refresh for event %s: %s", event_type, err)
+
+        if event_type in _SLOW_EVENTS:
+            _LOGGER.debug("OBS slow-path event: %s (full refresh)", event_type)
+            asyncio.run_coroutine_threadsafe(
+                self._coordinator.async_request_refresh(), self._loop
+            )
+
+    async def _async_set_data(self, data) -> None:
+        self._coordinator.async_set_updated_data(data)

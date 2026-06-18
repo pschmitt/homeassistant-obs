@@ -99,9 +99,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
         port=ws_port,
         password=password,
         loop=hass.loop,
-        refresh_callback=coordinator.async_request_refresh,
+        coordinator=coordinator,
     )
     await hass.async_add_executor_job(event_listener.start)
+    coordinator.event_listener = event_listener
 
     config_entry.runtime_data = OBSRuntimeData(
         client=client,
