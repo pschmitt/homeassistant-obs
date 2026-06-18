@@ -98,10 +98,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
         host=ws_host,
         port=ws_port,
         password=password,
-        loop=hass.loop,
         coordinator=coordinator,
     )
-    await hass.async_add_executor_job(event_listener.start)
+    event_listener.start()  # spawns an asyncio task — no executor needed
     coordinator.event_listener = event_listener
 
     config_entry.runtime_data = OBSRuntimeData(
@@ -122,7 +121,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) 
     ok = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
     if ok:
         if runtime.event_listener is not None:
-            await hass.async_add_executor_job(runtime.event_listener.stop)
+            await runtime.event_listener.stop()
         await hass.async_add_executor_job(runtime.client.disconnect)
         if runtime.ssh_tunnel is not None:
             await runtime.ssh_tunnel.async_stop()

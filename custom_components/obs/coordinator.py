@@ -62,9 +62,7 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
                 prev_port = self.client._port
                 self.client.update_endpoint("127.0.0.1", local_port)
                 if local_port != prev_port and self.event_listener is not None:
-                    await self.hass.async_add_executor_job(
-                        self.event_listener.update_endpoint, "127.0.0.1", local_port
-                    )
+                    self.event_listener.update_endpoint("127.0.0.1", local_port)
                 ir.async_delete_issue(self.hass, DOMAIN, f"{REPAIR_SSH_FAILED}_{entry_id}")
             except OBSSSHError as err:
                 ir.async_create_issue(
