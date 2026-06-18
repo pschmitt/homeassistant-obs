@@ -1,0 +1,156 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add OBS Studio",
+        "description": "Connect Home Assistant to an OBS Studio instance via WebSocket.",
+        "data": {
+          "name": "Name",
+          "host": "OBS host",
+          "ws_port": "WebSocket port",
+          "ws_password": "WebSocket password",
+          "ssh_enabled": "Connect via SSH tunnel",
+          "ssh_host": "SSH host (leave blank to use OBS host)",
+          "ssh_port": "SSH port",
+          "ssh_username": "SSH username",
+          "ssh_key_path": "SSH private key path",
+          "obs_remote_host": "OBS host as seen from SSH server"
+        },
+        "data_description": {
+          "host": "Hostname or IP of the machine running OBS Studio.",
+          "ws_port": "OBS WebSocket port (default: 4455).",
+          "ws_password": "Password set in OBS → Tools → WebSocket Server Settings.",
+          "ssh_enabled": "Forward the OBS WebSocket port over an SSH tunnel. Useful when OBS only listens on localhost.",
+          "ssh_host": "SSH server hostname. Defaults to the OBS host when left blank.",
+          "ssh_key_path": "Absolute path to the SSH private key file on this Home Assistant instance.",
+          "obs_remote_host": "Hostname/IP of OBS as seen from the SSH server. Usually `localhost`."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure OBS Studio",
+        "description": "Update connection settings. Leave the password blank to keep the current value.",
+        "data": {
+          "host": "OBS host",
+          "ws_port": "WebSocket port",
+          "ws_password": "WebSocket password (blank = keep current)",
+          "ssh_enabled": "Connect via SSH tunnel",
+          "ssh_host": "SSH host",
+          "ssh_port": "SSH port",
+          "ssh_username": "SSH username",
+          "ssh_key_path": "SSH private key path",
+          "obs_remote_host": "OBS host as seen from SSH server"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update OBS WebSocket password",
+        "description": "OBS rejected the stored password for **{name}**. Enter the current WebSocket password.",
+        "data": {
+          "ws_password": "WebSocket password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to OBS WebSocket. Check the host, port, and that OBS is running.",
+      "invalid_auth": "Authentication failed. Check the WebSocket password in OBS.",
+      "ssh_error": "SSH tunnel could not be established. Check the SSH credentials and key path.",
+      "unknown": "Unexpected error. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "This OBS instance is already configured.",
+      "reauth_successful": "Password updated.",
+      "reconfigure_successful": "Configuration updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OBS Studio options",
+        "data": {
+          "scan_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll OBS for state. Minimum 5 s."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_scene": { "name": "Current scene" },
+      "cpu_usage": { "name": "CPU usage" },
+      "memory_usage": { "name": "Memory usage" },
+      "available_disk_space": { "name": "Available disk space" },
+      "active_fps": { "name": "Active FPS" },
+      "render_skipped_frames": { "name": "Render skipped frames" },
+      "output_skipped_frames": { "name": "Output skipped frames" },
+      "stream_timecode": { "name": "Stream duration" },
+      "record_timecode": { "name": "Record duration" },
+      "obs_version": { "name": "OBS version" },
+      "platform": { "name": "Platform" }
+    },
+    "binary_sensor": {
+      "streaming": { "name": "Streaming" },
+      "recording": { "name": "Recording" },
+      "recording_paused": { "name": "Recording paused" },
+      "virtual_cam_active": { "name": "Virtual camera" },
+      "studio_mode_enabled": { "name": "Studio mode" },
+      "replay_buffer_active": { "name": "Replay buffer" }
+    },
+    "select": {
+      "scene": { "name": "Scene" }
+    },
+    "switch": {
+      "virtual_camera": { "name": "Virtual camera" },
+      "studio_mode": { "name": "Studio mode" }
+    }
+  },
+  "services": {
+    "set_scene": {
+      "name": "Set scene",
+      "description": "Switch to a specific scene in OBS Studio.",
+      "fields": {
+        "scene_name": {
+          "name": "Scene name",
+          "description": "Exact name of the scene to switch to."
+        }
+      }
+    },
+    "start_stream": { "name": "Start streaming", "description": "Start the OBS stream." },
+    "stop_stream": { "name": "Stop streaming", "description": "Stop the OBS stream." },
+    "toggle_stream": { "name": "Toggle streaming", "description": "Toggle OBS streaming." },
+    "start_record": { "name": "Start recording", "description": "Start OBS recording." },
+    "stop_record": { "name": "Stop recording", "description": "Stop OBS recording." },
+    "toggle_record": { "name": "Toggle recording", "description": "Toggle OBS recording." },
+    "pause_record": { "name": "Pause recording", "description": "Pause OBS recording." },
+    "resume_record": { "name": "Resume recording", "description": "Resume OBS recording." },
+    "start_virtual_cam": { "name": "Start virtual camera", "description": "Start the OBS virtual camera." },
+    "stop_virtual_cam": { "name": "Stop virtual camera", "description": "Stop the OBS virtual camera." },
+    "start_replay_buffer": { "name": "Start replay buffer", "description": "Start the OBS replay buffer." },
+    "stop_replay_buffer": { "name": "Stop replay buffer", "description": "Stop the OBS replay buffer." },
+    "save_replay_buffer": { "name": "Save replay buffer", "description": "Save the current OBS replay buffer clip." },
+    "trigger_hotkey": {
+      "name": "Trigger hotkey",
+      "description": "Trigger a named OBS hotkey.",
+      "fields": {
+        "hotkey_name": {
+          "name": "Hotkey name",
+          "description": "The OBS hotkey name to trigger."
+        }
+      }
+    }
+  },
+  "issues": {
+    "cannot_connect": {
+      "title": "Cannot reach OBS Studio for {name}",
+      "description": "Home Assistant failed to connect to OBS Studio for **{name}**.\n\nCheck that OBS is running and the WebSocket server is enabled, then reload the integration."
+    },
+    "auth_failed": {
+      "title": "OBS WebSocket authentication failed for {name}",
+      "description": "The WebSocket password for **{name}** was rejected. Go to **Settings → Devices & services → {name}** and reconfigure with the correct password."
+    },
+    "ssh_failed": {
+      "title": "SSH tunnel failed for {name}",
+      "description": "The SSH tunnel for **{name}** could not be established or has dropped. Check the SSH host, key path, and network connectivity."
+    }
+  }
+}
