@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -35,6 +35,7 @@ from .const import (
 )
 from .coordinator import OBSCoordinator
 from .events import OBSEventListener
+from .exceptions import OBSSSHError
 from .services import async_setup_services, async_update_set_scene_options
 from .ssh_tunnel import OBSSSHTunnel
 
@@ -141,7 +142,12 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
             obs_remote_host=config_entry.data.get(CONF_OBS_REMOTE_HOST, DEFAULT_OBS_REMOTE_HOST),
             obs_remote_port=ws_port,
         )
-        local_port = await ssh_tunnel.async_start()
+        try:
+            local_port = await ssh_tunnel.async_start()
+        except OBSSSHError as err:
+            raise ConfigEntryNotReady(
+                f"SSH tunnel not available for {config_entry.title}: {err}"
+            ) from err
         ws_host = "127.0.0.1"
         ws_port = local_port
         _LOGGER.debug("OBS SSH tunnel ready on 127.0.0.1:%s", local_port)
