@@ -35,6 +35,8 @@ from .const import (
 )
 from .coordinator import OBSCoordinator
 from .events import OBSEventListener
+from .file_watcher import OBSFileWatcher
+from .template_renderer import OBSTemplateRenderer
 from .exceptions import OBSSSHError
 from .services import async_setup_services, async_update_set_scene_options
 from .ssh_tunnel import OBSSSHTunnel
@@ -48,6 +50,8 @@ class OBSRuntimeData:
 
     client: OBSClient
     coordinator: OBSCoordinator
+    renderer: OBSTemplateRenderer
+    file_watcher: OBSFileWatcher
     ssh_tunnel: OBSSSHTunnel | None
     event_listener: OBSEventListener | None
 
@@ -161,13 +165,18 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
         timeout=DEFAULT_REQUEST_TIMEOUT,
     )
 
+    renderer = OBSTemplateRenderer(hass, config_entry)
     coordinator = OBSCoordinator(
         hass,
         config_entry,
         client,
         ssh_tunnel=ssh_tunnel,
+        renderer=renderer,
     )
     await coordinator.async_config_entry_first_refresh()
+
+    file_watcher = OBSFileWatcher(hass, coordinator, renderer, config_entry)
+    file_watcher.start()
 
     # Start real-time event listener (best-effort; polling still works without it).
     event_listener = OBSEventListener(
@@ -185,6 +194,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) -
     config_entry.runtime_data = OBSRuntimeData(
         client=client,
         coordinator=coordinator,
+        renderer=renderer,
+        file_watcher=file_watcher,
         ssh_tunnel=ssh_tunnel,
         event_listener=event_listener,
     )
@@ -202,6 +213,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: OBSConfigEntry) 
     runtime: OBSRuntimeData = config_entry.runtime_data
     ok = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
     if ok:
+        runtime.file_watcher.stop()
         if runtime.event_listener is not None:
             _LOGGER.debug("Stopping OBS event listener")
             await runtime.event_listener.stop()

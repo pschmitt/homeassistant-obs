@@ -71,47 +71,138 @@
   "options": {
     "step": {
       "init": {
-        "title": "OBS Studio options",
+        "title": "OBS Studio",
+        "menu_options": {
+          "settings": "⚙️ Settings",
+          "manage_templates": "🎬 Template overlays"
+        }
+      },
+      "settings": {
+        "title": "⚙️ Settings",
         "data": {
-          "scan_interval": "Update interval (seconds)",
-          "disable_offline_repairs": "Suppress offline repair notifications"
+          "scan_interval": "⏱️ Update interval (seconds)",
+          "disable_offline_repairs": "🔕 Suppress offline repair notifications"
         },
         "data_description": {
           "scan_interval": "How often to poll OBS for state. Minimum 5 s.",
           "disable_offline_repairs": "When enabled, no repair issue is raised if OBS or the SSH tunnel goes offline. Auth failures are always reported."
+        }
+      },
+      "manage_templates": {
+        "title": "🎬 Template overlays",
+        "description": "{template_count} template(s) defined. Select one to edit, or add a new one.",
+        "data": {
+          "template_action": "📋 Template"
+        }
+      },
+      "template_edit": {
+        "title": "Template",
+        "data": {
+          "name": "📝 Name",
+          "from_file": "📂 Load from file",
+          "output_dir": "📁 Output directory",
+          "delete": "🗑️ Delete this template"
+        },
+        "data_description": {
+          "name": "Output filename without .html (e.g. obs-overlay → obs-overlay.html).",
+          "from_file": "Read the template content from a file on disk instead of pasting it inline. Useful for editing in an external editor.",
+          "output_dir": "Directory where the rendered HTML is written. Must be under /config/www/ to be served at /local/… — default: /config/www/obs-studio",
+          "delete": "Permanently remove this template. This cannot be undone."
+        }
+      },
+      "template_edit_file": {
+        "title": "📄 File source",
+        "description": "🌐 **Browser Source URL**\n\n`{url}`\n\n**OBS setup:**\n1. In your scene: **+** → **Browser Source**\n2. Enter the URL above\n3. Check **Page is transparent**\n4. Resize and position in the scene\n\nThe file is re-read on every poll — no reload needed after editing.",
+        "data": {
+          "file_path": "📄 File path"
+        },
+        "data_description": {
+          "file_path": "Absolute path to the Jinja2 template file (e.g. /config/obs_studio/templates/obs-overlay.html.j2). Tip: drop any *.html.j2 file into /config/obs_studio/templates/ for automatic discovery without any config."
+        }
+      },
+      "template_edit_inline": {
+        "title": "🎨 Template content",
+        "description": "🌐 **Browser Source URL**\n\n`{url}`\n\n**OBS setup:**\n1. In your scene: **+** → **Browser Source**\n2. Enter the URL above\n3. Check **Page is transparent**\n4. Resize and position in the scene\n\n**Template variables:** `obs_scene` · `obs_streaming` · `obs_recording` · `obs_fps` · `obs_cpu` · `obs_mem`\n\nPlus all HA template functions: `states()`, `state_attr()`, `now()`, …",
+        "data": {
+          "content": "🎨 Template content"
+        },
+        "data_description": {
+          "content": "Jinja2 HTML template rendered on every OBS poll. Use {{ states('sensor.xyz') }} for live sensor values."
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "current_scene": { "name": "Current scene" },
-      "cpu_usage": { "name": "CPU usage" },
-      "memory_usage": { "name": "Memory usage" },
-      "available_disk_space": { "name": "Available disk space" },
-      "active_fps": { "name": "Active FPS" },
-      "render_skipped_frames": { "name": "Render skipped frames" },
-      "output_skipped_frames": { "name": "Output skipped frames" },
-      "stream_timecode": { "name": "Stream duration" },
-      "record_timecode": { "name": "Record duration" },
-      "obs_version": { "name": "OBS version" },
-      "platform": { "name": "Platform" }
+      "current_scene": {
+        "name": "Current scene"
+      },
+      "cpu_usage": {
+        "name": "CPU usage"
+      },
+      "memory_usage": {
+        "name": "Memory usage"
+      },
+      "available_disk_space": {
+        "name": "Available disk space"
+      },
+      "active_fps": {
+        "name": "Active FPS"
+      },
+      "render_skipped_frames": {
+        "name": "Render skipped frames"
+      },
+      "output_skipped_frames": {
+        "name": "Output skipped frames"
+      },
+      "stream_timecode": {
+        "name": "Stream duration"
+      },
+      "record_timecode": {
+        "name": "Record duration"
+      },
+      "obs_version": {
+        "name": "OBS version"
+      },
+      "platform": {
+        "name": "Platform"
+      }
     },
     "binary_sensor": {
-      "streaming": { "name": "Streaming" },
-      "recording": { "name": "Recording" },
-      "recording_paused": { "name": "Recording paused" },
-      "virtual_cam_active": { "name": "Virtual camera" },
-      "studio_mode_enabled": { "name": "Studio mode" },
-      "replay_buffer_active": { "name": "Replay buffer" }
+      "streaming": {
+        "name": "Streaming"
+      },
+      "recording": {
+        "name": "Recording"
+      },
+      "recording_paused": {
+        "name": "Recording paused"
+      },
+      "virtual_cam_active": {
+        "name": "Virtual camera"
+      },
+      "studio_mode_enabled": {
+        "name": "Studio mode"
+      },
+      "replay_buffer_active": {
+        "name": "Replay buffer"
+      }
     },
     "select": {
-      "scene": { "name": "Scene" }
+      "scene": {
+        "name": "Scene"
+      }
     },
     "switch": {
-      "streaming": { "name": "Streaming" },
-      "virtual_camera": { "name": "Virtual camera" },
-      "studio_mode": { "name": "Studio mode" }
+      "streaming": {
+        "name": "Streaming"
+      },
+      "virtual_camera": {
+        "name": "Virtual camera"
+      },
+      "studio_mode": {
+        "name": "Studio mode"
+      }
     }
   },
   "services": {
@@ -125,19 +216,58 @@
         }
       }
     },
-    "start_stream": { "name": "Start streaming", "description": "Start the OBS stream." },
-    "stop_stream": { "name": "Stop streaming", "description": "Stop the OBS stream." },
-    "toggle_stream": { "name": "Toggle streaming", "description": "Toggle OBS streaming." },
-    "start_record": { "name": "Start recording", "description": "Start OBS recording." },
-    "stop_record": { "name": "Stop recording", "description": "Stop OBS recording." },
-    "toggle_record": { "name": "Toggle recording", "description": "Toggle OBS recording." },
-    "pause_record": { "name": "Pause recording", "description": "Pause OBS recording." },
-    "resume_record": { "name": "Resume recording", "description": "Resume OBS recording." },
-    "start_virtual_cam": { "name": "Start virtual camera", "description": "Start the OBS virtual camera." },
-    "stop_virtual_cam": { "name": "Stop virtual camera", "description": "Stop the OBS virtual camera." },
-    "start_replay_buffer": { "name": "Start replay buffer", "description": "Start the OBS replay buffer." },
-    "stop_replay_buffer": { "name": "Stop replay buffer", "description": "Stop the OBS replay buffer." },
-    "save_replay_buffer": { "name": "Save replay buffer", "description": "Save the current OBS replay buffer clip." },
+    "start_stream": {
+      "name": "Start streaming",
+      "description": "Start the OBS stream."
+    },
+    "stop_stream": {
+      "name": "Stop streaming",
+      "description": "Stop the OBS stream."
+    },
+    "toggle_stream": {
+      "name": "Toggle streaming",
+      "description": "Toggle OBS streaming."
+    },
+    "start_record": {
+      "name": "Start recording",
+      "description": "Start OBS recording."
+    },
+    "stop_record": {
+      "name": "Stop recording",
+      "description": "Stop OBS recording."
+    },
+    "toggle_record": {
+      "name": "Toggle recording",
+      "description": "Toggle OBS recording."
+    },
+    "pause_record": {
+      "name": "Pause recording",
+      "description": "Pause OBS recording."
+    },
+    "resume_record": {
+      "name": "Resume recording",
+      "description": "Resume OBS recording."
+    },
+    "start_virtual_cam": {
+      "name": "Start virtual camera",
+      "description": "Start the OBS virtual camera."
+    },
+    "stop_virtual_cam": {
+      "name": "Stop virtual camera",
+      "description": "Stop the OBS virtual camera."
+    },
+    "start_replay_buffer": {
+      "name": "Start replay buffer",
+      "description": "Start the OBS replay buffer."
+    },
+    "stop_replay_buffer": {
+      "name": "Stop replay buffer",
+      "description": "Stop the OBS replay buffer."
+    },
+    "save_replay_buffer": {
+      "name": "Save replay buffer",
+      "description": "Save the current OBS replay buffer clip."
+    },
     "trigger_hotkey": {
       "name": "Trigger hotkey",
       "description": "Trigger a named OBS hotkey.",
@@ -145,6 +275,16 @@
         "hotkey_name": {
           "name": "Hotkey name",
           "description": "The OBS hotkey name to trigger."
+        }
+      }
+    },
+    "render_templates": {
+      "name": "Render templates",
+      "description": "Re-render OBS overlay templates immediately without waiting for the next poll.",
+      "fields": {
+        "name": {
+          "name": "Template name",
+          "description": "Name of a specific template to render. Omit to render all templates."
         }
       }
     }

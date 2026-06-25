@@ -20,6 +20,7 @@ from .exceptions import OBSAuthError, OBSConnectionError, OBSSSHError
 
 if TYPE_CHECKING:
     from .events import OBSEventListener
+    from .template_renderer import OBSTemplateRenderer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
         config_entry: ConfigEntry,
         client: OBSClient,
         ssh_tunnel=None,  # OBSSSHTunnel | None
+        renderer: OBSTemplateRenderer | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -49,6 +51,7 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
         )
         self.client = client
         self._ssh_tunnel = ssh_tunnel
+        self.renderer: OBSTemplateRenderer | None = renderer
         self.event_listener: OBSEventListener | None = None
 
     async def _async_update_data(self) -> OBSData:
@@ -109,4 +112,8 @@ class OBSCoordinator(DataUpdateCoordinator[OBSData]):
 
         ir.async_delete_issue(self.hass, DOMAIN, f"{REPAIR_CANNOT_CONNECT}_{entry_id}")
         ir.async_delete_issue(self.hass, DOMAIN, f"{REPAIR_AUTH_FAILED}_{entry_id}")
+
+        if self.renderer is not None:
+            await self.renderer.async_render_all(data)
+
         return data

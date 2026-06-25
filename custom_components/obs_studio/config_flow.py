@@ -10,11 +10,15 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -31,6 +35,12 @@ from .const import (
     CONF_SSH_KNOWN_HOSTS,
     CONF_SSH_PORT,
     CONF_SSH_USERNAME,
+    CONF_TEMPLATE_CONTENT,
+    CONF_TEMPLATE_FILE_PATH,
+    CONF_TEMPLATE_FROM_FILE,
+    CONF_TEMPLATE_NAME,
+    CONF_TEMPLATE_OUTPUT_DIR,
+    CONF_TEMPLATES,
     CONF_WS_PASSWORD,
     CONF_WS_PORT,
     DEFAULT_DISABLE_OFFLINE_REPAIRS,
@@ -40,6 +50,7 @@ from .const import (
     DEFAULT_SSH_KEY_PATH,
     DEFAULT_SSH_PORT,
     DEFAULT_SSH_USERNAME,
+    DEFAULT_TEMPLATE_OUTPUT_DIR,
     DEFAULT_WS_PORT,
     DOMAIN,
     MIN_SCAN_INTERVAL,
@@ -248,24 +259,57 @@ class OBSConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
+_ACTION_ADD = "__add__"
+_CONF_TEMPLATE_DELETE = "delete"
+
+
+def _local_url_path(output_dir: str, name: str) -> str:
+    """Derive /local/… URL path from /config/www/… output directory."""
+    if output_dir.startswith("/config/www/"):
+        suffix = output_dir[len("/config/www/"):].strip("/")
+        web_path = f"/local/{suffix}" if suffix else "/local"
+    else:
+        web_path = output_dir.rstrip("/")
+    return f"{web_path}/{name}.html"
+
+
+def _overlay_url(hass: HomeAssistant, output_dir: str, name: str) -> str:
+    """Build the full browser-source URL, using the HA instance URL as base."""
+    path = _local_url_path(output_dir, name)
+    try:
+        base = get_url(hass, prefer_external=False).rstrip("/")
+    except NoURLAvailableError:
+        base = "http://homeassistant.local:8123"
+    return f"{base}{path}"
+
+
 class OBSOptionsFlow(OptionsFlow):
     """Handle OBS options."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        return self.async_show_form(
+        return self.async_show_menu(
             step_id="init",
+            menu_options=["settings", "manage_templates"],
+        )
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={**self.config_entry.options, **user_input},
+            )
+        options = self.config_entry.options
+        return self.async_show_form(
+            step_id="settings",
             data_schema=vol.Schema(
                 {
                     vol.Required(
                         CONF_SCAN_INTERVAL,
-                        default=self.config_entry.options.get(
-                            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
-                        ),
+                        default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                     ): NumberSelector(
                         NumberSelectorConfig(
                             min=MIN_SCAN_INTERVAL,
@@ -275,10 +319,181 @@ class OBSOptionsFlow(OptionsFlow):
                     ),
                     vol.Required(
                         CONF_DISABLE_OFFLINE_REPAIRS,
-                        default=self.config_entry.options.get(
+                        default=options.get(
                             CONF_DISABLE_OFFLINE_REPAIRS, DEFAULT_DISABLE_OFFLINE_REPAIRS
                         ),
                     ): BooleanSelector(),
                 }
             ),
+        )
+
+    async def async_step_manage_templates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        templates: list[dict] = self.config_entry.options.get(CONF_TEMPLATES, [])
+
+        if user_input is not None:
+            action: str = user_input["template_action"]
+            self._tpl_editing_idx: int | None = (
+                None
+                if action == _ACTION_ADD
+                else next(
+                    i
+                    for i, t in enumerate(templates)
+                    if t.get(CONF_TEMPLATE_NAME) == action
+                )
+            )
+            return await self.async_step_template_edit()
+
+        choices = [
+            {"value": _ACTION_ADD, "label": "+ Add template"},
+            *[
+                {"value": t[CONF_TEMPLATE_NAME], "label": t[CONF_TEMPLATE_NAME]}
+                for t in templates
+            ],
+        ]
+        return self.async_show_form(
+            step_id="manage_templates",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("template_action"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=choices,
+                            mode=SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={"template_count": str(len(templates))},
+        )
+
+    async def async_step_template_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Meta step: name, source type, output directory, and optional delete."""
+        templates: list[dict] = list(
+            self.config_entry.options.get(CONF_TEMPLATES, [])
+        )
+        editing_idx: int | None = getattr(self, "_tpl_editing_idx", None)
+        existing = templates[editing_idx] if editing_idx is not None else {}
+
+        if user_input is not None:
+            if user_input.get(_CONF_TEMPLATE_DELETE) and editing_idx is not None:
+                templates.pop(editing_idx)
+                return self.async_create_entry(
+                    title="",
+                    data={**self.config_entry.options, CONF_TEMPLATES: templates},
+                )
+            self._tpl_name: str = user_input[CONF_TEMPLATE_NAME].strip()
+            self._tpl_from_file: bool = user_input[CONF_TEMPLATE_FROM_FILE]
+            self._tpl_output_dir: str = (
+                user_input[CONF_TEMPLATE_OUTPUT_DIR].strip()
+                or DEFAULT_TEMPLATE_OUTPUT_DIR
+            )
+            if self._tpl_from_file:
+                return await self.async_step_template_edit_file()
+            return await self.async_step_template_edit_inline()
+
+        schema_dict: dict = {
+            vol.Required(
+                CONF_TEMPLATE_NAME,
+                default=existing.get(CONF_TEMPLATE_NAME, ""),
+            ): TextSelector(),
+            vol.Required(
+                CONF_TEMPLATE_FROM_FILE,
+                default=existing.get(CONF_TEMPLATE_FROM_FILE, False),
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_TEMPLATE_OUTPUT_DIR,
+                default=existing.get(CONF_TEMPLATE_OUTPUT_DIR, DEFAULT_TEMPLATE_OUTPUT_DIR),
+            ): TextSelector(),
+        }
+        if editing_idx is not None:
+            schema_dict[vol.Optional(_CONF_TEMPLATE_DELETE, default=False)] = BooleanSelector()
+
+        return self.async_show_form(
+            step_id="template_edit",
+            data_schema=vol.Schema(schema_dict),
+        )
+
+    async def async_step_template_edit_file(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step for file-based template source."""
+        templates: list[dict] = list(
+            self.config_entry.options.get(CONF_TEMPLATES, [])
+        )
+        editing_idx: int | None = getattr(self, "_tpl_editing_idx", None)
+        existing = templates[editing_idx] if editing_idx is not None else {}
+
+        if user_input is not None:
+            tpl = {
+                CONF_TEMPLATE_NAME: self._tpl_name,
+                CONF_TEMPLATE_FROM_FILE: True,
+                CONF_TEMPLATE_FILE_PATH: user_input[CONF_TEMPLATE_FILE_PATH].strip(),
+                CONF_TEMPLATE_OUTPUT_DIR: self._tpl_output_dir,
+            }
+            if editing_idx is not None:
+                templates[editing_idx] = tpl
+            else:
+                templates.append(tpl)
+            return self.async_create_entry(
+                title="",
+                data={**self.config_entry.options, CONF_TEMPLATES: templates},
+            )
+
+        return self.async_show_form(
+            step_id="template_edit_file",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TEMPLATE_FILE_PATH,
+                        default=existing.get(CONF_TEMPLATE_FILE_PATH, ""),
+                    ): TextSelector(),
+                }
+            ),
+            description_placeholders={
+                "url": _overlay_url(self.hass, self._tpl_output_dir, self._tpl_name),
+            },
+        )
+
+    async def async_step_template_edit_inline(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step for inline (pasted) template content."""
+        templates: list[dict] = list(
+            self.config_entry.options.get(CONF_TEMPLATES, [])
+        )
+        editing_idx: int | None = getattr(self, "_tpl_editing_idx", None)
+        existing = templates[editing_idx] if editing_idx is not None else {}
+
+        if user_input is not None:
+            tpl = {
+                CONF_TEMPLATE_NAME: self._tpl_name,
+                CONF_TEMPLATE_FROM_FILE: False,
+                CONF_TEMPLATE_CONTENT: user_input[CONF_TEMPLATE_CONTENT],
+                CONF_TEMPLATE_OUTPUT_DIR: self._tpl_output_dir,
+            }
+            if editing_idx is not None:
+                templates[editing_idx] = tpl
+            else:
+                templates.append(tpl)
+            return self.async_create_entry(
+                title="",
+                data={**self.config_entry.options, CONF_TEMPLATES: templates},
+            )
+
+        return self.async_show_form(
+            step_id="template_edit_inline",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TEMPLATE_CONTENT,
+                        default=existing.get(CONF_TEMPLATE_CONTENT, ""),
+                    ): TextSelector(TextSelectorConfig(multiline=True)),
+                }
+            ),
+            description_placeholders={
+                "url": _overlay_url(self.hass, self._tpl_output_dir, self._tpl_name),
+            },
         )

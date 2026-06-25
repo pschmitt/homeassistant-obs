@@ -81,6 +81,110 @@ install, and restart Home Assistant.
 
 All settings are managed through the UI config flow.  No YAML required.
 
+## Template overlays
+
+The integration can render Jinja2 HTML templates on every OBS poll and write the
+output to `/config/www/obs-studio/` (served at `/local/obs-studio/` in HA).  
+Add the resulting URL as an OBS **Browser Source** with *"Page is transparent"* enabled
+to overlay live data on any scene — no credentials required.
+
+### Available template variables
+
+In addition to all standard HA template functions (`states()`, `state_attr()`,
+`now()`, `is_state()`, …), the following OBS state variables are injected:
+
+| Variable | Type | Description |
+|---|---|---|
+| `obs_scene` | `str \| None` | Name of the current program scene |
+| `obs_streaming` | `bool` | True when OBS is live |
+| `obs_recording` | `bool` | True when OBS is recording |
+| `obs_fps` | `float` | Current output frame rate |
+| `obs_cpu` | `float` | OBS process CPU usage (%) |
+| `obs_mem` | `float` | OBS process memory usage (MB) |
+
+### Defining templates
+
+#### Option A — File-based (drop a file, zero config)
+
+Place a `<name>.html.j2` file in `/config/www/obs-studio/`.  
+The integration auto-discovers all `*.html.j2` files in that directory and renders
+each to `<name>.html` on every coordinator update.
+
+```
+/config/www/obs-studio/
+  obs-overlay.html.j2      → rendered to obs-overlay.html
+  streaming-badge.html.j2  → rendered to streaming-badge.html
+```
+
+#### Option B — Inline (defined in the options flow)
+
+Go to **Settings → Devices & services → OBS Studio → Configure**.  
+In the *Template overlays* dropdown, pick **+ Add template**, enter a name and
+paste the template content.  Inline templates are stored in the config entry and
+render alongside any file-based ones.  If the same name exists in both, the inline
+definition takes precedence.
+
+### Example — room temperature widget
+
+This overlay displays the office temperature from a Home Assistant sensor as a
+semi-transparent pill in the bottom-left corner of the scene.
+
+Save as `/config/www/obs-studio/obs-overlay.html.j2` (file-based), or paste the
+content into an inline template named `obs-overlay`:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      background: transparent;
+      margin: 0;
+      padding: 0;
+      display: inline-flex;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    #widget {
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 12px;
+      padding: 10px 18px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .icon  { font-size: 1.4rem; }
+    .value { font-size: 1.6rem; font-weight: 600; }
+    .label { font-size: 0.75rem; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <div id="widget">
+    <span class="icon">🌡️</span>
+    <div>
+      <div class="value">
+        {{ states('sensor.office_temperature_filtered') | float | round(1) }} °C
+      </div>
+      <div class="label">Office</div>
+    </div>
+  </div>
+  <script>
+    /* Reload periodically so OBS picks up re-rendered values */
+    setTimeout(() => location.reload(), 60000);
+  </script>
+</body>
+</html>
+```
+
+**OBS setup:**
+
+1. In your scene (e.g. *Webcam*): **+** → **Browser Source**
+2. URL: `http://homeassistant.local:8123/local/obs-studio/obs-overlay.html`
+3. Set width/height to fit the widget (e.g. 220 × 70)
+4. Check **"Page is transparent"** / **"Allow transparency"**
+5. Drag the source to the desired position in the scene
+
 ## Logo
 
 The OBS Studio logo used in this integration is © OBS Project contributors and is licensed

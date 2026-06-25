@@ -19,6 +19,7 @@ from .const import (
     ATTR_SCENE_NAME,
     DOMAIN,
     SERVICE_PAUSE_RECORD,
+    SERVICE_RENDER_TEMPLATES,
     SERVICE_RESUME_RECORD,
     SERVICE_SAVE_REPLAY_BUFFER,
     SERVICE_SET_SCENE,
@@ -232,4 +233,27 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_TRIGGER_HOTKEY,
         handle_trigger_hotkey,
         schema=vol.Schema({vol.Required(ATTR_HOTKEY_NAME): cv.string}, extra=vol.ALLOW_EXTRA),
+    )
+
+    async def handle_render_templates(call: ServiceCall) -> None:
+        entry = _get_entry(hass, call)
+        runtime = entry.runtime_data
+        if runtime.coordinator.data is None:
+            raise HomeAssistantError(
+                "OBS coordinator has no data yet — is OBS connected?"
+            )
+        raw = call.data.get("name")
+        name_filter: set[str] | None = None
+        if raw is not None:
+            name_filter = {raw} if isinstance(raw, str) else set(raw)
+        await runtime.renderer.async_render_all(runtime.coordinator.data, name_filter=name_filter)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RENDER_TEMPLATES,
+        handle_render_templates,
+        schema=vol.Schema(
+            {vol.Optional("name"): vol.Any(cv.string, [cv.string])},
+            extra=vol.ALLOW_EXTRA,
+        ),
     )

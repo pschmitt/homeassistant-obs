@@ -53,6 +53,17 @@ SERVICE_START_REPLAY_BUFFER = "start_replay_buffer"
 SERVICE_STOP_REPLAY_BUFFER = "stop_replay_buffer"
 SERVICE_SAVE_REPLAY_BUFFER = "save_replay_buffer"
 SERVICE_TRIGGER_HOTKEY = "trigger_hotkey"
+SERVICE_RENDER_TEMPLATES = "render_templates"
+
+# Template overlay rendering
+CONF_TEMPLATES = "templates"
+CONF_TEMPLATE_NAME = "name"
+CONF_TEMPLATE_CONTENT = "content"
+CONF_TEMPLATE_FROM_FILE = "from_file"
+CONF_TEMPLATE_FILE_PATH = "file_path"
+CONF_TEMPLATE_OUTPUT_DIR = "output_dir"
+DEFAULT_TEMPLATE_OUTPUT_DIR = "/config/www/obs-studio"
+DEFAULT_TEMPLATE_SOURCE_DIR = "/config/obs_studio/templates"
 
 # Attributes
 ATTR_SCENE_NAME = "scene_name"
